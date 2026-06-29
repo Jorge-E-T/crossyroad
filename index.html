@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Crossy Road Game</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/99/three.min.js"></script>
+    <script src="script.js" defer></script>
+  </head>
+ <body>
+    <div id="splash">
+      <div id="splash-content">
+        <img id="splash-title" src="crossyroad.png" alt="Crossy Road" />
+        <img id="chicken-head" src="chicken.png" alt="Chicken" />
+        <button id="startBtn">START</button>
+        <button id="resetScoreBtn">Reset Score</button>
+      </div>
+    </div>
+
+    <div id="topbar">
+      <div id="counter">0</div>
+      <div id="highscore">Best: 0</div>
+      <button id="muteBtn">🔊</button>
+    </div>
+
+    <div id="controlls">
+      <button id="left">
+        <svg width="22" height="22" viewBox="0 0 10 10">
+          <g transform="rotate(-90, 5,5)">
+            <path d="M5,4 L7,6 L3,6 L5,4" />
+          </g>
+        </svg>
+      </button>
+      <button id="right">
+        <svg width="22" height="22" viewBox="0 0 10 10">
+          <g transform="rotate(90, 5,5)">
+            <path d="M5,4 L7,6 L3,6 L5,4" />
+          </g>
+        </svg>
+      </button>
+    </div>
+
+    <div id="end">
+      <div id="end-content">
+        <div id="end-score"></div>
+        <button id="retry">Retry</button>
+      </div>
+    </div>
+  </body>
+</html>
