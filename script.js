@@ -6,7 +6,20 @@ const coinDOM = document.getElementById("coinCounter");
 const controllsDOM = document.getElementById("controlls");
 const eagleWarningDOM = document.getElementById("eagleWarning");
 
-let highScore = parseInt(localStorage.getItem("crossyHighScore")) || 0;
+function getHighScore(mode) {
+  return parseInt(localStorage.getItem("crossyHighScore_" + mode)) || 0;
+}
+function setHighScore(mode, value) {
+  localStorage.setItem("crossyHighScore_" + mode, value);
+}
+function getTotalCoins() {
+  return parseInt(localStorage.getItem("crossyCoins")) || 0;
+}
+function setTotalCoins(value) {
+  localStorage.setItem("crossyCoins", value);
+}
+
+let highScore = getHighScore("classic");
 highscoreDOM.textContent = "Best: " + highScore;
 
 // Music
@@ -125,7 +138,8 @@ let gameMode = "classic"; // "classic" or "arcade"
 let laneEnterTime = 0;
 const eagleTimeLimit = 10000; // ms before the eagle swoops in
 let eagleWarningShown = false;
-let coinCount = 0;
+let coinCount = getTotalCoins();
+coinDOM.textContent = "🪙 " + coinCount;
 
 const carFrontTexture = new Texture(40, 80, [{ x: 0, y: 10, w: 30, h: 60 }]);
 const carBackTexture = new Texture(40, 80, [{ x: 10, y: 10, w: 30, h: 60 }]);
@@ -676,9 +690,9 @@ function animate(timestamp) {
         const interpColumn = startColumn + (endColumn - startColumn) * columnProgress;
         const positionX = (interpColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
         camera.position.y = initialCameraPositionY + positionY;
-        camera.position.x = initialCameraPositionX + positionX - ((currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2 - initialCameraPositionX + initialCameraPositionX);
+        camera.position.x = initialCameraPositionX + positionX;
         dirLight.position.y = initialDirLightPositionY + positionY;
-        dirLight.position.x = initialDirLightPositionX + positionX - ((currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2);
+        dirLight.position.x = initialDirLightPositionX + positionX;
         chicken.position.y = positionY;
         chicken.position.x = positionX;
         chicken.position.z = jumpDeltaDistance;
@@ -721,7 +735,7 @@ function animate(timestamp) {
           counterDOM.innerHTML = currentLane;
           if (currentLane > highScore) {
             highScore = currentLane;
-            localStorage.setItem("crossyHighScore", highScore);
+            setHighScore(gameMode, highScore);
             highscoreDOM.textContent = "Best: " + highScore;
           }
           laneEnterTime = timestamp;
@@ -798,6 +812,7 @@ function checkCoinCollect() {
     lane.coins.splice(coinIndex, 1);
   }
   coinCount++;
+  setTotalCoins(coinCount);
   coinDOM.textContent = "🪙 " + coinCount;
   playCoinSound();
 }
@@ -807,6 +822,8 @@ requestAnimationFrame(animate);
 function startGame(mode) {
   gameMode = mode;
   gameStarted = true;
+  highScore = getHighScore(mode); // load the high score belonging to THIS mode
+  highscoreDOM.textContent = "Best: " + highScore;
   laneEnterTime = performance.now(); // eagle timer starts ONLY now, when gameplay truly begins
   document.getElementById("splash").style.display = "none";
   if (mode === "arcade") {
@@ -821,8 +838,9 @@ document.getElementById("classicBtn").addEventListener("click", () => startGame(
 document.getElementById("arcadeBtn").addEventListener("click", () => startGame("arcade"));
 
 document.getElementById("resetScoreBtn").addEventListener("click", () => {
+  setHighScore("classic", 0);
+  setHighScore("arcade", 0);
   highScore = 0;
-  localStorage.setItem("crossyHighScore", 0);
   highscoreDOM.textContent = "Best: 0";
 });
 
@@ -833,5 +851,6 @@ document.getElementById("mainMenuBtn").addEventListener("click", () => {
   endDOM.style.visibility = "hidden";
   gameStarted = false;
   laneEnterTime = 0;
+  highscoreDOM.textContent = "Best: " + getHighScore("classic");
   document.getElementById("splash").style.display = "flex";
 });
