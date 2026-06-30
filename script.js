@@ -218,10 +218,10 @@ function unlockSkin(skinId) {
 
 const skinDefinitions = [
   { id: "chicken", name: "Chicken", cost: 0, previewClass: "preview-chicken" },
-  { id: "pig", name: "Pig", cost: 10, previewClass: "preview-pig" },
-  { id: "gifty", name: "Gifty", cost: 15, previewClass: "preview-gifty" },
-  { id: "duck", name: "Baby Duck", cost: 15, previewClass: "preview-duck" },
-  { id: "pigeon", name: "Poopy Pigeon", cost: 20, previewClass: "preview-pigeon" },
+  { id: "pig", name: "Pig", cost: 20, previewClass: "preview-pig" },
+  { id: "gifty", name: "Gifty", cost: 30, previewClass: "preview-gifty" },
+  { id: "duck", name: "Baby Duck", cost: 30, previewClass: "preview-duck" },
+  { id: "pigeon", name: "Poopy Pigeon", cost: 40, previewClass: "preview-pigeon" },
 ];
 
 let chicken = CharacterModel(getActiveSkin());
@@ -284,21 +284,36 @@ function Coin() {
 }
 
 function addCoinsToLane(lane) {
-  // Sparse coins: ~18% chance to place a single coin on this lane
-  if (Math.random() < 0.18) {
-    let position;
-    let attempts = 0;
+  // ~25% chance to place a coin on this lane (still scarce but consistent)
+  if (Math.random() > 0.25) return;
+
+  let position;
+  let attempts = 0;
+
+  if (gameMode === "arcade") {
+    // In arcade mode, place coins within 3 columns of center so the player
+    // actually encounters them without needing left/right movement.
+    const center = Math.floor(columns / 2);
+    const spread = 3;
+    do {
+      position = center + Math.floor(Math.random() * (spread * 2 + 1)) - spread;
+      position = Math.max(0, Math.min(columns - 1, position));
+      attempts++;
+    } while (lane.occupiedPositions.has(position) && attempts < 20);
+  } else {
+    // Classic mode: anywhere across the lane
     do {
       position = Math.floor(Math.random() * columns);
       attempts++;
     } while (lane.occupiedPositions.has(position) && attempts < 20);
-    if (!lane.occupiedPositions.has(position)) {
-      const coin = new Coin();
-      coin.position.x = (position * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
-      lane.coinPositions.add(position);
-      lane.coins.push(coin);
-      lane.mesh.add(coin);
-    }
+  }
+
+  if (!lane.occupiedPositions.has(position)) {
+    const coin = new Coin();
+    coin.position.x = (position * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+    lane.coinPositions.add(position);
+    lane.coins.push(coin);
+    lane.mesh.add(coin);
   }
 }
 
@@ -733,6 +748,7 @@ function Lane(index, prevType) {
       this.occupiedPositions = new Set();
       this.coinPositions = new Set();
       this.coins = [];
+      addCoinsToLane(this);
       break;
     }
     case "truck": {
@@ -756,6 +772,7 @@ function Lane(index, prevType) {
       this.occupiedPositions = new Set();
       this.coinPositions = new Set();
       this.coins = [];
+      addCoinsToLane(this);
       break;
     }
     case "tracks": {
@@ -773,6 +790,7 @@ function Lane(index, prevType) {
       this.occupiedPositions = new Set();
       this.coinPositions = new Set();
       this.coins = [];
+      addCoinsToLane(this);
       break;
     }
     case "river": {
@@ -971,7 +989,7 @@ window.addEventListener("keydown", (event) => {
 //   2. A per-direction debounce prevents the same direction firing twice from one physical notch.
 let lastScrollUp = 0;
 let lastScrollDown = 0;
-const scrollDebounce = stepTime + 120; // slightly longer than one hop animation
+const scrollDebounce = stepTime + 80; // slightly longer than one hop animation
 
 window.addEventListener("scrollUp", () => {
   const now = Date.now();
