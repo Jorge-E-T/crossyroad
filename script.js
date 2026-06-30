@@ -2,6 +2,9 @@ const counterDOM = document.getElementById("counter");
 const endDOM = document.getElementById("end");
 const highscoreDOM = document.getElementById("highscore");
 const endScoreDOM = document.getElementById("end-score");
+const coinDOM = document.getElementById("coinCounter");
+const controllsDOM = document.getElementById("controlls");
+const eagleWarningDOM = document.getElementById("eagleWarning");
 
 let highScore = parseInt(localStorage.getItem("crossyHighScore")) || 0;
 highscoreDOM.textContent = "Best: " + highScore;
@@ -9,6 +12,12 @@ highscoreDOM.textContent = "Best: " + highScore;
 // Music
 let isMuted = false;
 let midiPlayer = null;
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
 
 function startMusic() {
   if (isMuted) return;
@@ -16,40 +25,51 @@ function startMusic() {
     midiPlayer.play();
     return;
   }
-  import("https://cdn.jsdelivr.net/npm/midi-player-js@2.0.16/browser/midiplayer.min.js")
-    .then(() => {
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      const audioCtx = new AudioContext();
-
-      fetch("music.mid")
-        .then(res => res.arrayBuffer())
-        .then(buffer => {
-          midiPlayer = new MidiPlayer.Player((event) => {
-            if (isMuted) return;
-            if (event.name === "Note on" && event.velocity > 0) {
-              const osc = audioCtx.createOscillator();
-              const gain = audioCtx.createGain();
-              osc.connect(gain);
-              gain.connect(audioCtx.destination);
-              osc.type = "square";
-              osc.frequency.value = 440 * Math.pow(2, (event.noteNumber - 69) / 12);
-              gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-              gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-              osc.start();
-              osc.stop(audioCtx.currentTime + 0.3);
-            }
-          });
-          midiPlayer.on("endOfFile", () => {
-            if (!isMuted) midiPlayer.play();
-          });
-          midiPlayer.loadArrayBuffer(buffer);
-          midiPlayer.play();
-        });
+  const ctx = getAudioCtx();
+  fetch("music.mid")
+    .then(res => res.arrayBuffer())
+    .then(buffer => {
+      midiPlayer = new MidiPlayer.Player((event) => {
+        if (isMuted) return;
+        if (event.name === "Note on" && event.velocity > 0) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "square";
+          osc.frequency.value = 440 * Math.pow(2, (event.noteNumber - 69) / 12);
+          gain.gain.setValueAtTime(0.05, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.3);
+        }
+      });
+      midiPlayer.on("endOfFile", () => {
+        if (!isMuted) midiPlayer.play();
+      });
+      midiPlayer.loadArrayBuffer(buffer);
+      midiPlayer.play();
     });
 }
 
 function stopMusic() {
   if (midiPlayer) midiPlayer.stop();
+}
+
+function playCoinSound() {
+  if (isMuted) return;
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(1200, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1800, ctx.currentTime + 0.08);
+  gain.gain.setValueAtTime(0.08, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+  osc.start();
+  osc.stop(ctx.currentTime + 0.15);
 }
 
 document.getElementById("muteBtn").addEventListener("click", () => {
@@ -103,10 +123,9 @@ let gameOver;
 let gameStarted = false;
 let gameMode = "classic"; // "classic" or "arcade"
 let laneEnterTime = 0;
-const eagleTimeLimit = 5000; // ms before the eagle swoops in
+const eagleTimeLimit = 10000; // ms before the eagle swoops in
 let eagleWarningShown = false;
 let coinCount = 0;
-const coinDOM = document.getElementById("coinCounter");
 
 const carFrontTexture = new Texture(40, 80, [{ x: 0, y: 10, w: 30, h: 60 }]);
 const carBackTexture = new Texture(40, 80, [{ x: 10, y: 10, w: 30, h: 60 }]);
@@ -184,6 +203,25 @@ function Coin() {
   return coin;
 }
 
+function addCoinsToLane(lane) {
+  // Sparse coins: ~18% chance to place a single coin on this lane
+  if (Math.random() < 0.18) {
+    let position;
+    let attempts = 0;
+    do {
+      position = Math.floor(Math.random() * columns);
+      attempts++;
+    } while (lane.occupiedPositions.has(position) && attempts < 20);
+    if (!lane.occupiedPositions.has(position)) {
+      const coin = new Coin();
+      coin.position.x = (position * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+      lane.coinPositions.add(position);
+      lane.coins.push(coin);
+      lane.mesh.add(coin);
+    }
+  }
+}
+
 const initaliseValues = () => {
   lanes = generateLanes();
   currentLane = 0;
@@ -191,19 +229,21 @@ const initaliseValues = () => {
   previousTimestamp = null;
   startMoving = false;
   moves = [];
-  stepStartTimestamp;
+  stepStartTimestamp = null;
   gameOver = false;
-  laneEnterTime = performance.now();
   eagleWarningShown = false;
   coinCount = 0;
   coinDOM.textContent = "🪙 0";
-  document.getElementById("eagleWarning").classList.remove("active");
+  eagleWarningDOM.classList.remove("active");
   chicken.position.x = 0;
   chicken.position.y = 0;
   camera.position.y = initialCameraPositionY;
   camera.position.x = initialCameraPositionX;
   dirLight.position.x = initialDirLightPositionX;
   dirLight.position.y = initialDirLightPositionY;
+  // NOTE: laneEnterTime is intentionally NOT set here.
+  // It gets set when the player actually presses Classic/Arcade (see startGame),
+  // so the eagle timer never starts ticking before the game has begun.
 };
 
 initaliseValues();
@@ -457,6 +497,9 @@ function Lane(index) {
         return vechicle;
       });
       this.speed = laneSpeeds[Math.floor(Math.random() * laneSpeeds.length)];
+      this.occupiedPositions = new Set();
+      this.coinPositions = new Set();
+      this.coins = [];
       break;
     }
     case "truck": {
@@ -485,35 +528,38 @@ function Lane(index) {
   }
 }
 
-function addCoinsToLane(lane) {
-  // Sparse coins: ~18% chance to place a single coin on this lane
-  if (Math.random() < 0.18) {
-    let position;
-    let attempts = 0;
-    do {
-      position = Math.floor(Math.random() * columns);
-      attempts++;
-    } while (lane.occupiedPositions.has(position) && attempts < 20);
-    if (!lane.occupiedPositions.has(position)) {
-      const coin = new Coin();
-      coin.position.x = (position * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
-      lane.coinPositions.add(position);
-      lane.coins.push(coin);
-      lane.mesh.add(coin);
-    }
-  }
-}
-
 document.querySelector("#retry").addEventListener("click", () => {
   counterDOM.innerHTML = '0';
   lanes.forEach((lane) => scene.remove(lane.mesh));
   initaliseValues();
+  laneEnterTime = performance.now();
   endDOM.style.visibility = "hidden";
   startMusic();
 });
 
 document.getElementById("left").addEventListener("click", () => move("left"));
 document.getElementById("right").addEventListener("click", () => move("right"));
+
+window.addEventListener("keydown", (event) => {
+  if (event.keyCode == "38") move("forward");
+  else if (event.keyCode == "40") { event.preventDefault(); }
+  else if (event.keyCode == "37") move("left");
+  else if (event.keyCode == "39") move("right");
+});
+
+// R1 scroll wheel
+let lastScrollMoveTime = 0;
+const scrollCooldown = 150; // ms required between scroll moves
+
+function scrollMove(direction) {
+  const now = Date.now();
+  if (now - lastScrollMoveTime < scrollCooldown) return;
+  lastScrollMoveTime = now;
+  move(direction);
+}
+
+window.addEventListener("scrollUp", () => scrollMove("forward"));
+window.addEventListener("scrollDown", () => scrollMove("backward"));
 
 function findClearestColumn(laneIndex, fromColumn) {
   const lane = lanes[laneIndex];
@@ -530,80 +576,57 @@ function findClearestColumn(laneIndex, fromColumn) {
   return fromColumn; // no clear path found (shouldn't normally happen)
 }
 
-window.addEventListener("keydown", (event) => {
-  if (event.keyCode == "38") move("forward");
-  else if (event.keyCode == "40") { event.preventDefault(); }
-  else if (event.keyCode == "37") move("left");
-  else if (event.keyCode == "39") move("right");
-});
-
-// R1 scroll wheel
-let lastScrollMoveTime = 0;
-const scrollCooldown = 150; // ms required between scroll moves — raise this to make the wheel less sensitive, lower it to make it more sensitive
-
-function scrollMove(direction) {
-  const now = Date.now();
-  if (now - lastScrollMoveTime < scrollCooldown) return;
-  lastScrollMoveTime = now;
-  move(direction);
-}
-
-window.addEventListener("scrollUp", () => scrollMove("forward"));
-window.addEventListener("scrollDown", () => scrollMove("backward"));
-
 function move(direction) {
   if (gameOver || !gameStarted) return;
 
   // Arcade mode only allows forward/backward
   if (gameMode === "arcade" && (direction === "left" || direction === "right")) return;
 
-  const finalPositions = moves.reduce(
-    (position, move) => {
-      if (move === "forward") return { lane: position.lane + 1, column: position.column };
-      if (move === "backward") return { lane: position.lane - 1, column: position.column };
-      if (move === "left") return { lane: position.lane, column: position.column - 1 };
-      if (move === "right") return { lane: position.lane, column: position.column + 1 };
-    },
-    { lane: currentLane, column: currentColumn }
-  );
+  // Block new moves while a hop is still animating, to prevent clipping through obstacles
+  if (moves.length > 0) return;
 
   if (direction === "forward") {
-    addLane();
-    let targetColumn = finalPositions.column;
+    const targetLaneIndex = currentLane + 1;
+    let targetColumn = currentColumn;
+
     if (gameMode === "arcade") {
-      targetColumn = findClearestColumn(finalPositions.lane, finalPositions.column);
+      targetColumn = findClearestColumn(targetLaneIndex, currentColumn);
     } else if (
-      lanes[finalPositions.lane].type === "forest" &&
-      lanes[finalPositions.lane].occupiedPositions.has(finalPositions.column)
+      lanes[targetLaneIndex].type === "forest" &&
+      lanes[targetLaneIndex].occupiedPositions.has(currentColumn)
     ) {
-      return;
+      return; // blocked by tree directly ahead in classic mode
     }
-    if (!stepStartTimestamp) startMoving = true;
+
+    addLane();
+    startMoving = true;
     moves.push({ type: "forward", targetColumn });
-    return;
   } else if (direction === "backward") {
-    if (finalPositions.lane === 0) return;
+    if (currentLane === 0) return;
+    const targetLaneIndex = currentLane - 1;
     if (
-      lanes[finalPositions.lane - 1].type === "forest" &&
-      lanes[finalPositions.lane - 1].occupiedPositions.has(finalPositions.column)
+      lanes[targetLaneIndex].type === "forest" &&
+      lanes[targetLaneIndex].occupiedPositions.has(currentColumn)
     ) return;
-    if (!stepStartTimestamp) startMoving = true;
+    startMoving = true;
+    moves.push({ type: "backward" });
   } else if (direction === "left") {
-    if (finalPositions.column === 0) return;
+    if (currentColumn === 0) return;
     if (
-      lanes[finalPositions.lane].type === "forest" &&
-      lanes[finalPositions.lane].occupiedPositions.has(finalPositions.column - 1)
+      lanes[currentLane].type === "forest" &&
+      lanes[currentLane].occupiedPositions.has(currentColumn - 1)
     ) return;
-    if (!stepStartTimestamp) startMoving = true;
+    startMoving = true;
+    moves.push({ type: "left" });
   } else if (direction === "right") {
-    if (finalPositions.column === columns - 1) return;
+    if (currentColumn === columns - 1) return;
     if (
-      lanes[finalPositions.lane].type === "forest" &&
-      lanes[finalPositions.lane].occupiedPositions.has(finalPositions.column + 1)
+      lanes[currentLane].type === "forest" &&
+      lanes[currentLane].occupiedPositions.has(currentColumn + 1)
     ) return;
-    if (!stepStartTimestamp) startMoving = true;
+    startMoving = true;
+    moves.push({ type: "right" });
   }
-  moves.push({ type: direction });
 }
 
 function animate(timestamp) {
@@ -645,17 +668,17 @@ function animate(timestamp) {
 
     const startColumn = currentColumn;
     const endColumn = moves[0].targetColumn !== undefined ? moves[0].targetColumn : currentColumn;
-    const columnDelta = (endColumn - startColumn) * Math.min(moveDeltaTime / stepTime, 1);
+    const columnProgress = Math.min(moveDeltaTime / stepTime, 1);
 
     switch (currentMove) {
       case "forward": {
         const positionY = currentLane * positionWidth * zoom + moveDeltaDistance;
-        const positionX =
-          ((startColumn + columnDelta) * positionWidth + positionWidth / 2) * zoom -
-          (boardWidth * zoom) / 2;
+        const interpColumn = startColumn + (endColumn - startColumn) * columnProgress;
+        const positionX = (interpColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
         camera.position.y = initialCameraPositionY + positionY;
-        camera.position.x = initialCameraPositionX + (positionX - ((currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2));
+        camera.position.x = initialCameraPositionX + positionX - ((currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2 - initialCameraPositionX + initialCameraPositionX);
         dirLight.position.y = initialDirLightPositionY + positionY;
+        dirLight.position.x = initialDirLightPositionX + positionX - ((currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2);
         chicken.position.y = positionY;
         chicken.position.x = positionX;
         chicken.position.z = jumpDeltaDistance;
@@ -703,7 +726,7 @@ function animate(timestamp) {
           }
           laneEnterTime = timestamp;
           eagleWarningShown = false;
-          document.getElementById("eagleWarning").classList.remove("active");
+          eagleWarningDOM.classList.remove("active");
           checkCoinCollect();
           break;
         }
@@ -712,7 +735,7 @@ function animate(timestamp) {
           counterDOM.innerHTML = currentLane;
           laneEnterTime = timestamp;
           eagleWarningShown = false;
-          document.getElementById("eagleWarning").classList.remove("active");
+          eagleWarningDOM.classList.remove("active");
           checkCoinCollect();
           break;
         }
@@ -738,15 +761,15 @@ function animate(timestamp) {
     });
   }
 
-  // Eagle time limit check (only when chicken isn't mid-hop)
-  if (!stepStartTimestamp && gameStarted && !gameOver) {
+  // Eagle time limit check (only when chicken isn't mid-hop, and only once gameplay has actually started)
+  if (gameStarted && !gameOver && !stepStartTimestamp && laneEnterTime > 0) {
     const timeOnLane = timestamp - laneEnterTime;
     if (timeOnLane > eagleTimeLimit - 1500 && !eagleWarningShown) {
       eagleWarningShown = true;
-      document.getElementById("eagleWarning").classList.add("active");
+      eagleWarningDOM.classList.add("active");
     }
     if (timeOnLane > eagleTimeLimit) {
-      document.getElementById("eagleWarning").classList.remove("active");
+      eagleWarningDOM.classList.remove("active");
       triggerGameOver("The eagle got you!\nScore: " + currentLane + "\nBest: " + highScore);
     }
   }
@@ -759,7 +782,7 @@ function triggerGameOver(message) {
   gameOver = true;
   moves = [];
   stopMusic();
-  document.getElementById("eagleWarning").classList.remove("active");
+  eagleWarningDOM.classList.remove("active");
   endScoreDOM.textContent = message;
   endDOM.style.visibility = "visible";
 }
@@ -768,17 +791,15 @@ function checkCoinCollect() {
   const lane = lanes[currentLane];
   if (!lane || !lane.coinPositions || !lane.coinPositions.has(currentColumn)) return;
   lane.coinPositions.delete(currentColumn);
-  const coinIndex = lane.coins.findIndex(
-    (c) => Math.round(c.position.x) === Math.round(
-      (currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2
-    )
-  );
+  const targetX = (currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+  const coinIndex = lane.coins.findIndex((c) => Math.round(c.position.x) === Math.round(targetX));
   if (coinIndex !== -1) {
     lane.mesh.remove(lane.coins[coinIndex]);
     lane.coins.splice(coinIndex, 1);
   }
   coinCount++;
   coinDOM.textContent = "🪙 " + coinCount;
+  playCoinSound();
 }
 
 requestAnimationFrame(animate);
@@ -786,7 +807,13 @@ requestAnimationFrame(animate);
 function startGame(mode) {
   gameMode = mode;
   gameStarted = true;
+  laneEnterTime = performance.now(); // eagle timer starts ONLY now, when gameplay truly begins
   document.getElementById("splash").style.display = "none";
+  if (mode === "arcade") {
+    controllsDOM.classList.add("hidden");
+  } else {
+    controllsDOM.classList.remove("hidden");
+  }
   startMusic();
 }
 
@@ -805,5 +832,6 @@ document.getElementById("mainMenuBtn").addEventListener("click", () => {
   initaliseValues();
   endDOM.style.visibility = "hidden";
   gameStarted = false;
+  laneEnterTime = 0;
   document.getElementById("splash").style.display = "flex";
 });
