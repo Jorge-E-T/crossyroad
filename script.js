@@ -1311,7 +1311,6 @@ function animate(timestamp) {
         const vehicleName = lanes[currentLane].type === "truck" ? "truck" : "car";
         triggerGameOver("Hit by a " + vehicleName + "!\nScore: " + currentLane + "\nBest: " + highScore, true);
       }
-      }
     });
   }
 
