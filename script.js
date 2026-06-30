@@ -32,41 +32,61 @@ function getAudioCtx() {
   return audioCtx;
 }
 
+let midiBuffer = null; // cache the file so we don't re-fetch it every time
+
 function startMusic() {
   if (isMuted) return;
-  if (midiPlayer) {
-    midiPlayer.play();
+  const ctx = getAudioCtx();
+
+  if (midiBuffer) {
+    rebuildAndPlayMidiPlayer(ctx, midiBuffer);
     return;
   }
-  const ctx = getAudioCtx();
+
   fetch("music.mid")
     .then(res => res.arrayBuffer())
     .then(buffer => {
-      midiPlayer = new MidiPlayer.Player((event) => {
-        if (isMuted) return;
-        if (event.name === "Note on" && event.velocity > 0) {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = "square";
-          osc.frequency.value = 440 * Math.pow(2, (event.noteNumber - 69) / 12);
-          gain.gain.setValueAtTime(0.05, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.3);
-        }
-      });
-      midiPlayer.on("endOfFile", () => {
-        if (!isMuted) midiPlayer.play();
-      });
-      midiPlayer.loadArrayBuffer(buffer);
-      midiPlayer.play();
+      midiBuffer = buffer;
+      rebuildAndPlayMidiPlayer(ctx, buffer);
     });
 }
 
+function rebuildAndPlayMidiPlayer(ctx, buffer) {
+  // Always create a fresh player instance so playback reliably restarts from the beginning.
+  if (midiPlayer) {
+    midiPlayer.stop();
+    midiPlayer = null;
+  }
+
+  midiPlayer = new MidiPlayer.Player((event) => {
+    if (isMuted) return;
+    if (event.name === "Note on" && event.velocity > 0) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.value = 440 * Math.pow(2, (event.noteNumber - 69) / 12);
+      gain.gain.setValueAtTime(0.05, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    }
+  });
+
+  midiPlayer.on("endOfFile", () => {
+    if (!isMuted) rebuildAndPlayMidiPlayer(ctx, buffer);
+  });
+
+  midiPlayer.loadArrayBuffer(buffer);
+  midiPlayer.play();
+}
+
 function stopMusic() {
-  if (midiPlayer) midiPlayer.stop();
+  if (midiPlayer) {
+    midiPlayer.stop();
+    midiPlayer = null;
+  }
 }
 
 function playCoinSound() {
