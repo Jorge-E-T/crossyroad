@@ -101,6 +101,12 @@ let moves;
 let stepStartTimestamp;
 let gameOver;
 let gameStarted = false;
+let gameMode = "classic"; // "classic" or "arcade"
+let laneEnterTime = 0;
+const eagleTimeLimit = 5000; // ms before the eagle swoops in
+let eagleWarningShown = false;
+let coinCount = 0;
+const coinDOM = document.getElementById("coinCounter");
 
 const carFrontTexture = new Texture(40, 80, [{ x: 0, y: 10, w: 30, h: 60 }]);
 const carBackTexture = new Texture(40, 80, [{ x: 10, y: 10, w: 30, h: 60 }]);
@@ -167,6 +173,17 @@ const laneSpeeds = [2, 2.5, 3];
 const vechicleColors = [0xa52523, 0xbdb638, 0x78b14b];
 const threeHeights = [20, 45, 60];
 
+function Coin() {
+  const coin = new THREE.Mesh(
+    new THREE.CylinderBufferGeometry(6 * zoom, 6 * zoom, 2 * zoom, 16),
+    new THREE.MeshPhongMaterial({ color: 0xffd700, flatShading: true })
+  );
+  coin.rotation.x = Math.PI / 2;
+  coin.position.z = 10 * zoom;
+  coin.castShadow = true;
+  return coin;
+}
+
 const initaliseValues = () => {
   lanes = generateLanes();
   currentLane = 0;
@@ -176,6 +193,11 @@ const initaliseValues = () => {
   moves = [];
   stepStartTimestamp;
   gameOver = false;
+  laneEnterTime = performance.now();
+  eagleWarningShown = false;
+  coinCount = 0;
+  coinDOM.textContent = "🪙 0";
+  document.getElementById("eagleWarning").classList.remove("active");
   chicken.position.x = 0;
   chicken.position.y = 0;
   camera.position.y = initialCameraPositionY;
@@ -391,6 +413,10 @@ function Lane(index) {
     case "field": {
       this.type = "field";
       this.mesh = new Grass();
+      this.occupiedPositions = new Set();
+      this.coinPositions = new Set();
+      this.coins = [];
+      addCoinsToLane(this);
       break;
     }
     case "forest": {
@@ -408,6 +434,9 @@ function Lane(index) {
         this.mesh.add(three);
         return three;
       });
+      this.coinPositions = new Set();
+      this.coins = [];
+      addCoinsToLane(this);
       break;
     }
     case "car": {
@@ -448,7 +477,29 @@ function Lane(index) {
         return vechicle;
       });
       this.speed = laneSpeeds[Math.floor(Math.random() * laneSpeeds.length)];
+      this.occupiedPositions = new Set();
+      this.coinPositions = new Set();
+      this.coins = [];
       break;
+    }
+  }
+}
+
+function addCoinsToLane(lane) {
+  // Sparse coins: ~18% chance to place a single coin on this lane
+  if (Math.random() < 0.18) {
+    let position;
+    let attempts = 0;
+    do {
+      position = Math.floor(Math.random() * columns);
+      attempts++;
+    } while (lane.occupiedPositions.has(position) && attempts < 20);
+    if (!lane.occupiedPositions.has(position)) {
+      const coin = new Coin();
+      coin.position.x = (position * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+      lane.coinPositions.add(position);
+      lane.coins.push(coin);
+      lane.mesh.add(coin);
     }
   }
 }
@@ -463,6 +514,21 @@ document.querySelector("#retry").addEventListener("click", () => {
 
 document.getElementById("left").addEventListener("click", () => move("left"));
 document.getElementById("right").addEventListener("click", () => move("right"));
+
+function findClearestColumn(laneIndex, fromColumn) {
+  const lane = lanes[laneIndex];
+  if (!lane || lane.type !== "forest") return fromColumn;
+  if (!lane.occupiedPositions.has(fromColumn)) return fromColumn;
+
+  // Search outward from fromColumn across the full lane width
+  for (let offset = 1; offset < columns; offset++) {
+    const right = fromColumn + offset;
+    const left = fromColumn - offset;
+    if (right < columns && !lane.occupiedPositions.has(right)) return right;
+    if (left >= 0 && !lane.occupiedPositions.has(left)) return left;
+  }
+  return fromColumn; // no clear path found (shouldn't normally happen)
+}
 
 window.addEventListener("keydown", (event) => {
   if (event.keyCode == "38") move("forward");
@@ -487,6 +553,10 @@ window.addEventListener("scrollDown", () => scrollMove("backward"));
 
 function move(direction) {
   if (gameOver || !gameStarted) return;
+
+  // Arcade mode only allows forward/backward
+  if (gameMode === "arcade" && (direction === "left" || direction === "right")) return;
+
   const finalPositions = moves.reduce(
     (position, move) => {
       if (move === "forward") return { lane: position.lane + 1, column: position.column };
@@ -498,12 +568,19 @@ function move(direction) {
   );
 
   if (direction === "forward") {
-    if (
-      lanes[finalPositions.lane + 1].type === "forest" &&
-      lanes[finalPositions.lane + 1].occupiedPositions.has(finalPositions.column)
-    ) return;
-    if (!stepStartTimestamp) startMoving = true;
     addLane();
+    let targetColumn = finalPositions.column;
+    if (gameMode === "arcade") {
+      targetColumn = findClearestColumn(finalPositions.lane, finalPositions.column);
+    } else if (
+      lanes[finalPositions.lane].type === "forest" &&
+      lanes[finalPositions.lane].occupiedPositions.has(finalPositions.column)
+    ) {
+      return;
+    }
+    if (!stepStartTimestamp) startMoving = true;
+    moves.push({ type: "forward", targetColumn });
+    return;
   } else if (direction === "backward") {
     if (finalPositions.lane === 0) return;
     if (
@@ -526,7 +603,7 @@ function move(direction) {
     ) return;
     if (!stepStartTimestamp) startMoving = true;
   }
-  moves.push(direction);
+  moves.push({ type: direction });
 }
 
 function animate(timestamp) {
@@ -561,20 +638,31 @@ function animate(timestamp) {
   }
 
   if (stepStartTimestamp) {
+    const currentMove = moves[0].type;
     const moveDeltaTime = timestamp - stepStartTimestamp;
     const moveDeltaDistance = Math.min(moveDeltaTime / stepTime, 1) * positionWidth * zoom;
     const jumpDeltaDistance = Math.sin(Math.min(moveDeltaTime / stepTime, 1) * Math.PI) * 8 * zoom;
-    switch (moves[0]) {
+
+    const startColumn = currentColumn;
+    const endColumn = moves[0].targetColumn !== undefined ? moves[0].targetColumn : currentColumn;
+    const columnDelta = (endColumn - startColumn) * Math.min(moveDeltaTime / stepTime, 1);
+
+    switch (currentMove) {
       case "forward": {
         const positionY = currentLane * positionWidth * zoom + moveDeltaDistance;
+        const positionX =
+          ((startColumn + columnDelta) * positionWidth + positionWidth / 2) * zoom -
+          (boardWidth * zoom) / 2;
         camera.position.y = initialCameraPositionY + positionY;
+        camera.position.x = initialCameraPositionX + (positionX - ((currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2));
         dirLight.position.y = initialDirLightPositionY + positionY;
         chicken.position.y = positionY;
+        chicken.position.x = positionX;
         chicken.position.z = jumpDeltaDistance;
         break;
       }
       case "backward": {
-        positionY = currentLane * positionWidth * zoom - moveDeltaDistance;
+        const positionY = currentLane * positionWidth * zoom - moveDeltaDistance;
         camera.position.y = initialCameraPositionY + positionY;
         dirLight.position.y = initialDirLightPositionY + positionY;
         chicken.position.y = positionY;
@@ -603,24 +691,33 @@ function animate(timestamp) {
       }
     }
     if (moveDeltaTime > stepTime) {
-      switch (moves[0]) {
+      switch (currentMove) {
         case "forward": {
           currentLane++;
+          currentColumn = endColumn;
           counterDOM.innerHTML = currentLane;
           if (currentLane > highScore) {
             highScore = currentLane;
             localStorage.setItem("crossyHighScore", highScore);
             highscoreDOM.textContent = "Best: " + highScore;
           }
+          laneEnterTime = timestamp;
+          eagleWarningShown = false;
+          document.getElementById("eagleWarning").classList.remove("active");
+          checkCoinCollect();
           break;
         }
         case "backward": {
           currentLane--;
           counterDOM.innerHTML = currentLane;
+          laneEnterTime = timestamp;
+          eagleWarningShown = false;
+          document.getElementById("eagleWarning").classList.remove("active");
+          checkCoinCollect();
           break;
         }
-        case "left": { currentColumn--; break; }
-        case "right": { currentColumn++; break; }
+        case "left": { currentColumn--; checkCoinCollect(); break; }
+        case "right": { currentColumn++; checkCoinCollect(); break; }
       }
       moves.shift();
       stepStartTimestamp = moves.length === 0 ? null : timestamp;
@@ -636,28 +733,77 @@ function animate(timestamp) {
       const carMinX = vechicle.position.x - (vechicleLength * zoom) / 2;
       const carMaxX = vechicle.position.x + (vechicleLength * zoom) / 2;
       if (chickenMaxX > carMinX && chickenMinX < carMaxX) {
-        gameOver = true;
-        moves = [];
-        stopMusic();
-        endScoreDOM.textContent = "Score: " + currentLane + "\nBest: " + highScore;
-        endDOM.style.visibility = "visible";
+        triggerGameOver("Score: " + currentLane + "\nBest: " + highScore);
       }
     });
+  }
+
+  // Eagle time limit check (only when chicken isn't mid-hop)
+  if (!stepStartTimestamp && gameStarted && !gameOver) {
+    const timeOnLane = timestamp - laneEnterTime;
+    if (timeOnLane > eagleTimeLimit - 1500 && !eagleWarningShown) {
+      eagleWarningShown = true;
+      document.getElementById("eagleWarning").classList.add("active");
+    }
+    if (timeOnLane > eagleTimeLimit) {
+      document.getElementById("eagleWarning").classList.remove("active");
+      triggerGameOver("The eagle got you!\nScore: " + currentLane + "\nBest: " + highScore);
+    }
   }
 
   renderer.render(scene, camera);
 }
 
+function triggerGameOver(message) {
+  if (gameOver) return;
+  gameOver = true;
+  moves = [];
+  stopMusic();
+  document.getElementById("eagleWarning").classList.remove("active");
+  endScoreDOM.textContent = message;
+  endDOM.style.visibility = "visible";
+}
+
+function checkCoinCollect() {
+  const lane = lanes[currentLane];
+  if (!lane || !lane.coinPositions || !lane.coinPositions.has(currentColumn)) return;
+  lane.coinPositions.delete(currentColumn);
+  const coinIndex = lane.coins.findIndex(
+    (c) => Math.round(c.position.x) === Math.round(
+      (currentColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2
+    )
+  );
+  if (coinIndex !== -1) {
+    lane.mesh.remove(lane.coins[coinIndex]);
+    lane.coins.splice(coinIndex, 1);
+  }
+  coinCount++;
+  coinDOM.textContent = "🪙 " + coinCount;
+}
+
 requestAnimationFrame(animate);
 
-document.getElementById("startBtn").addEventListener("click", () => {
+function startGame(mode) {
+  gameMode = mode;
   gameStarted = true;
   document.getElementById("splash").style.display = "none";
   startMusic();
-});
+}
+
+document.getElementById("classicBtn").addEventListener("click", () => startGame("classic"));
+document.getElementById("arcadeBtn").addEventListener("click", () => startGame("arcade"));
 
 document.getElementById("resetScoreBtn").addEventListener("click", () => {
   highScore = 0;
   localStorage.setItem("crossyHighScore", 0);
   highscoreDOM.textContent = "Best: 0";
+});
+
+document.getElementById("mainMenuBtn").addEventListener("click", () => {
+  counterDOM.innerHTML = '0';
+  lanes.forEach((lane) => scene.remove(lane.mesh));
+  initaliseValues();
+  endDOM.style.visibility = "hidden";
+  gameStarted = false;
+  document.getElementById("splash").style.display = "flex";
 });

@@ -41,6 +41,11 @@ button {
   font-size: 8px;
 }
 
+#coinCounter {
+  color: #ffd700;
+  font-size: 7px;
+}
+
 #highscore {
   color: #ffd700;
   font-size: 7px;
@@ -104,11 +109,15 @@ button {
 
 #end button {
   background-color: red;
-  padding: 12px 24px;
+  padding: 10px 20px;
   font-family: inherit;
   font-size: 8px;
   color: white;
   border-radius: 4px;
+}
+
+#mainMenuBtn {
+  background-color: #555 !important;
 }
 
 #splash {
@@ -153,13 +162,22 @@ button {
   75% { transform: translateY(-3px) rotate(4deg); }
 }
 
-#startBtn {
+#modeButtons {
+  display: flex;
+  gap: 8px;
+}
+
+#classicBtn, #arcadeBtn {
   font-family: "Press Start 2P", cursive;
-  font-size: 11px;
+  font-size: 8px;
   color: white;
   background-color: #e63946;
-  padding: 14px 28px;
+  padding: 10px 12px;
   border-radius: 6px;
+}
+
+#arcadeBtn {
+  background-color: #1d8a4e;
 }
 
 #resetScoreBtn {
@@ -169,4 +187,26 @@ button {
   background-color: rgba(255,255,255,0.7);
   padding: 8px 14px;
   border-radius: 4px;
+}
+
+#eagleWarning {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 0, 0, 0.25);
+  pointer-events: none;
+  z-index: 150;
+  display: none;
+}
+
+#eagleWarning.active {
+  display: block;
+  animation: eagle-flash 0.4s ease-in-out infinite;
+}
+
+@keyframes eagle-flash {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.6; }
 }

@@ -14,13 +14,17 @@
       <div id="splash-content">
         <img id="splash-title" src="crossyroad.png" alt="Crossy Road" />
         <img id="chicken-head" src="chicken.png" alt="Chicken" />
-        <button id="startBtn">START</button>
+        <div id="modeButtons">
+          <button id="classicBtn">CLASSIC</button>
+          <button id="arcadeBtn">ARCADE</button>
+        </div>
         <button id="resetScoreBtn">Reset Score</button>
       </div>
     </div>
 
     <div id="topbar">
       <div id="counter">0</div>
+      <div id="coinCounter">🪙 0</div>
       <div id="highscore">Best: 0</div>
       <button id="muteBtn">🔊</button>
     </div>
@@ -42,10 +46,13 @@
       </button>
     </div>
 
+    <div id="eagleWarning"></div>
+
     <div id="end">
       <div id="end-content">
         <div id="end-score"></div>
         <button id="retry">Retry</button>
+        <button id="mainMenuBtn">Main Menu</button>
       </div>
     </div>
   </body>
