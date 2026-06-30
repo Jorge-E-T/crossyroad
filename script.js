@@ -8,34 +8,48 @@ highscoreDOM.textContent = "Best: " + highScore;
 
 // Music
 let isMuted = false;
-let audioCtx = null;
-let musicInterval = null;
-const notes = [523, 587, 659, 698, 784, 880, 988, 1047];
-const melody = [0,2,4,2,0,4,7,4,2,4,0,2,4,2,0];
-let melodyPos = 0;
+let midiPlayer = null;
 
 function startMusic() {
-  if (isMuted || musicInterval) return;
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  musicInterval = setInterval(() => {
-    if (isMuted) return;
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.type = "square";
-    osc.frequency.value = notes[melody[melodyPos % melody.length]];
-    gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
-    osc.start();
-    osc.stop(audioCtx.currentTime + 0.18);
-    melodyPos++;
-  }, 220);
+  if (isMuted) return;
+  if (midiPlayer) {
+    midiPlayer.play();
+    return;
+  }
+  import("https://cdn.jsdelivr.net/npm/midi-player-js@2.0.16/browser/midiplayer.min.js")
+    .then(() => {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+
+      fetch("music.mid")
+        .then(res => res.arrayBuffer())
+        .then(buffer => {
+          midiPlayer = new MidiPlayer.Player((event) => {
+            if (isMuted) return;
+            if (event.name === "Note on" && event.velocity > 0) {
+              const osc = audioCtx.createOscillator();
+              const gain = audioCtx.createGain();
+              osc.connect(gain);
+              gain.connect(audioCtx.destination);
+              osc.type = "square";
+              osc.frequency.value = 440 * Math.pow(2, (event.noteNumber - 69) / 12);
+              gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+              gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+              osc.start();
+              osc.stop(audioCtx.currentTime + 0.3);
+            }
+          });
+          midiPlayer.on("endOfFile", () => {
+            if (!isMuted) midiPlayer.play();
+          });
+          midiPlayer.loadArrayBuffer(buffer);
+          midiPlayer.play();
+        });
+    });
 }
 
 function stopMusic() {
-  clearInterval(musicInterval);
-  musicInterval = null;
+  if (midiPlayer) midiPlayer.stop();
 }
 
 document.getElementById("muteBtn").addEventListener("click", () => {
