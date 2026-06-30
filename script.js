@@ -152,6 +152,7 @@ let previousTimestamp;
 let startMoving;
 let moves;
 let stepStartTimestamp;
+let moveStartX = 0;
 let gameOver;
 let gameStarted = false;
 let gameMode = "classic"; // "classic" or "arcade"
@@ -222,6 +223,10 @@ const skinDefinitions = [
 
 let chicken = CharacterModel(getActiveSkin());
 scene.add(chicken);
+
+const eagle = Eagle();
+scene.add(eagle);
+let eagleSwooping = false;
 
 function swapCharacterModel(skinId) {
   scene.remove(chicken);
@@ -309,6 +314,8 @@ const initaliseValues = () => {
   chicken.position.x = 0;
   chicken.position.y = 0;
   chicken.scale.z = 1;
+  eagle.visible = false;
+  eagleSwooping = false;
   camera.position.y = initialCameraPositionY;
   camera.position.x = initialCameraPositionX;
   dirLight.position.x = initialDirLightPositionX;
@@ -860,6 +867,54 @@ function River() {
   return river;
 }
 
+function Eagle() {
+  const eagle = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(20 * zoom, 14 * zoom, 10 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0x5a4632, flatShading: true })
+  );
+  body.castShadow = true;
+  eagle.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(8 * zoom, 8 * zoom, 8 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xf5f1e6, flatShading: true })
+  );
+  head.position.set(0, 13 * zoom, 2 * zoom);
+  eagle.add(head);
+
+  const beak = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(3 * zoom, 4 * zoom, 3 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xf5a623, flatShading: true })
+  );
+  beak.position.set(0, 18 * zoom, 1 * zoom);
+  eagle.add(beak);
+
+  const wingGeometry = new THREE.BoxBufferGeometry(34 * zoom, 10 * zoom, 2 * zoom);
+  const wingMaterial = new THREE.MeshLambertMaterial({ color: 0x4a3a26, flatShading: true });
+
+  const wingLeft = new THREE.Mesh(wingGeometry, wingMaterial);
+  wingLeft.position.set(-24 * zoom, 0, 3 * zoom);
+  wingLeft.name = "wingLeft";
+  eagle.add(wingLeft);
+
+  const wingRight = new THREE.Mesh(wingGeometry, wingMaterial);
+  wingRight.position.set(24 * zoom, 0, 3 * zoom);
+  wingRight.name = "wingRight";
+  eagle.add(wingRight);
+
+  const tail = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(8 * zoom, 12 * zoom, 2 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0x4a3a26, flatShading: true })
+  );
+  tail.position.set(0, -12 * zoom, 1 * zoom);
+  eagle.add(tail);
+
+  eagle.visible = false;
+  return eagle;
+}
+
 function LilyPad() {
   const pad = new THREE.Group();
   const base = new THREE.Mesh(
@@ -932,6 +987,13 @@ function findClearestColumn(laneIndex, fromColumn) {
 }
 
 function move(direction) {
+  // Resync currentColumn with the chicken's true visual position before validating any move.
+  // This matters most after standing on a drifting lily pad, where currentColumn can go stale.
+  currentColumn = Math.round(
+    ((chicken.position.x + (boardWidth * zoom) / 2) / zoom - positionWidth / 2) / positionWidth
+  );
+  currentColumn = Math.max(0, Math.min(columns - 1, currentColumn));
+
   if (gameOver || !gameStarted) return;
 
   // Arcade mode only allows forward/backward
@@ -1069,6 +1131,7 @@ function animate(timestamp) {
   if (startMoving) {
     stepStartTimestamp = timestamp;
     startMoving = false;
+    moveStartX = chicken.position.x;
   }
 
   if (stepStartTimestamp) {
@@ -1084,8 +1147,11 @@ function animate(timestamp) {
     switch (currentMove) {
       case "forward": {
         const positionY = currentLane * positionWidth * zoom + moveDeltaDistance;
-        const interpColumn = startColumn + (endColumn - startColumn) * columnProgress;
-        const positionX = (interpColumn * positionWidth + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+        // Land at the SAME relative X offset the chicken started the hop at, plus whatever
+        // sideways shift this particular move requires (used by arcade auto-sidestep).
+        const columnShift = (endColumn - startColumn) * positionWidth * zoom;
+        const targetX = moveStartX + columnShift;
+        const positionX = moveStartX + (targetX - moveStartX) * columnProgress;
         camera.position.y = initialCameraPositionY + positionY;
         camera.position.x = initialCameraPositionX + positionX;
         dirLight.position.y = initialDirLightPositionY + positionY;
@@ -1104,9 +1170,7 @@ function animate(timestamp) {
         break;
       }
       case "left": {
-        const positionX =
-          (currentColumn * positionWidth + positionWidth / 2) * zoom -
-          (boardWidth * zoom) / 2 - moveDeltaDistance;
+        const positionX = moveStartX - moveDeltaDistance;
         camera.position.x = initialCameraPositionX + positionX;
         dirLight.position.x = initialDirLightPositionX + positionX;
         chicken.position.x = positionX;
@@ -1114,9 +1178,7 @@ function animate(timestamp) {
         break;
       }
       case "right": {
-        const positionX =
-          (currentColumn * positionWidth + positionWidth / 2) * zoom -
-          (boardWidth * zoom) / 2 + moveDeltaDistance;
+        const positionX = moveStartX + moveDeltaDistance;
         camera.position.x = initialCameraPositionX + positionX;
         dirLight.position.x = initialDirLightPositionX + positionX;
         chicken.position.x = positionX;
@@ -1128,7 +1190,12 @@ function animate(timestamp) {
       switch (currentMove) {
         case "forward": {
           currentLane++;
-          currentColumn = endColumn;
+          // Recompute currentColumn from the chicken's true visual X (accounts for any
+          // lily pad drift that happened before this hop), not from the old pre-drift value.
+          currentColumn = Math.round(
+            ((chicken.position.x + (boardWidth * zoom) / 2) / zoom - positionWidth / 2) / positionWidth
+          );
+          currentColumn = Math.max(0, Math.min(columns - 1, currentColumn));
           counterDOM.innerHTML = currentLane;
           if (currentLane > highScore) {
             highScore = currentLane;
@@ -1150,8 +1217,15 @@ function animate(timestamp) {
           checkCoinCollect();
           break;
         }
-        case "left": { currentColumn--; checkCoinCollect(); break; }
-        case "right": { currentColumn++; checkCoinCollect(); break; }
+        case "left":
+        case "right": {
+          currentColumn = Math.round(
+            ((chicken.position.x + (boardWidth * zoom) / 2) / zoom - positionWidth / 2) / positionWidth
+          );
+          currentColumn = Math.max(0, Math.min(columns - 1, currentColumn));
+          checkCoinCollect();
+          break;
+        }
       }
       moves.shift();
       stepStartTimestamp = moves.length === 0 ? null : timestamp;
@@ -1212,13 +1286,100 @@ function animate(timestamp) {
       eagleWarningShown = true;
       eagleWarningDOM.classList.add("active");
     }
-    if (timeOnLane > eagleTimeLimit) {
+    if (timeOnLane > eagleTimeLimit && !eagleSwooping) {
       eagleWarningDOM.classList.remove("active");
-      triggerGameOver("The eagle got you!\nScore: " + currentLane + "\nBest: " + highScore);
+      gameOver = true; // lock out further movement immediately, before the swoop plays
+      moves = [];
+      stopMusic();
+      eagleSwoopAndGrab(() => {
+        endScoreDOM.textContent = "The eagle got you!\nScore: " + currentLane + "\nBest: " + highScore;
+        endDOM.style.visibility = "visible";
+      });
     }
   }
 
   renderer.render(scene, camera);
+}
+
+function eagleSwoopAndGrab(onComplete) {
+  eagleSwooping = true;
+  eagle.visible = true;
+
+  const duration = 1100; // ms
+  const startTime = performance.now();
+
+  // Start high above and to the side of the chicken's current visual spot, end exactly on it.
+  const grabX = chicken.position.x;
+  const grabY = chicken.position.y;
+  const startX = grabX + 160 * zoom;
+  const startZ = 220 * zoom;
+  const endZ = 16 * zoom;
+
+  eagle.position.set(startX, grabY - 60 * zoom, startZ);
+  eagle.rotation.z = 0;
+
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    // Ease-in toward the chicken for a fast, dramatic dive
+    const eased = t * t;
+
+    eagle.position.x = startX + (grabX - startX) * eased;
+    eagle.position.y = (grabY - 60 * zoom) + (grabY - (grabY - 60 * zoom)) * eased;
+    eagle.position.z = startZ + (endZ - startZ) * eased;
+
+    // Simple wing flap
+    const flap = Math.sin(now / 60) * 0.5;
+    const wingLeft = eagle.getObjectByName("wingLeft");
+    const wingRight = eagle.getObjectByName("wingRight");
+    if (wingLeft) wingLeft.rotation.x = flap;
+    if (wingRight) wingRight.rotation.x = -flap;
+
+    if (t < 0.85) {
+      requestAnimationFrame(step);
+    } else if (t < 1) {
+      // Final grab moment: snap chicken to the eagle's talons and lift off together
+      chicken.position.x = eagle.position.x;
+      chicken.position.y = eagle.position.y;
+      chicken.position.z = eagle.position.z - 4 * zoom;
+      requestAnimationFrame(step);
+    } else {
+      // Carry the chicken away upward and off-screen
+      liftOffWithChicken(onComplete);
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function liftOffWithChicken(onComplete) {
+  const duration = 500;
+  const startTime = performance.now();
+  const startPos = eagle.position.clone();
+  const endPos = startPos.clone();
+  endPos.z += 200 * zoom;
+  endPos.y -= 80 * zoom;
+
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    eagle.position.lerpVectors(startPos, endPos, t);
+    chicken.position.x = eagle.position.x;
+    chicken.position.y = eagle.position.y;
+    chicken.position.z = eagle.position.z - 4 * zoom;
+
+    const flap = Math.sin(now / 50) * 0.6;
+    const wingLeft = eagle.getObjectByName("wingLeft");
+    const wingRight = eagle.getObjectByName("wingRight");
+    if (wingLeft) wingLeft.rotation.x = flap;
+    if (wingRight) wingRight.rotation.x = -flap;
+
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      eagle.visible = false;
+      eagleSwooping = false;
+      onComplete();
+    }
+  }
+  requestAnimationFrame(step);
 }
 
 function flattenAndFade(onComplete) {
