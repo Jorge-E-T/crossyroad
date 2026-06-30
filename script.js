@@ -284,8 +284,8 @@ function Coin() {
 }
 
 function addCoinsToLane(lane) {
-  // ~25% chance to place a coin on this lane (still scarce but consistent)
-  if (Math.random() > 0.25) return;
+  // ~18% chance to place a coin on this lane (still scarce but consistent)
+  if (Math.random() > 0.18) return;
 
   let position;
   let attempts = 0;
