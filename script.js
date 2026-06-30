@@ -194,8 +194,40 @@ const addLane = () => {
   lanes.push(lane);
 };
 
-const chicken = new Chicken();
+function getActiveSkin() {
+  return localStorage.getItem("crossyActiveSkin") || "chicken";
+}
+function setActiveSkin(skinId) {
+  localStorage.setItem("crossyActiveSkin", skinId);
+}
+function getUnlockedSkins() {
+  const stored = localStorage.getItem("crossyUnlockedSkins");
+  return stored ? JSON.parse(stored) : ["chicken"];
+}
+function unlockSkin(skinId) {
+  const unlocked = getUnlockedSkins();
+  if (!unlocked.includes(skinId)) {
+    unlocked.push(skinId);
+    localStorage.setItem("crossyUnlockedSkins", JSON.stringify(unlocked));
+  }
+}
+
+const skinDefinitions = [
+  { id: "chicken", name: "Chicken", cost: 0, previewClass: "preview-chicken" },
+  { id: "pig", name: "Pig", cost: 10, previewClass: "preview-pig" },
+];
+
+let chicken = CharacterModel(getActiveSkin());
 scene.add(chicken);
+
+function swapCharacterModel(skinId) {
+  scene.remove(chicken);
+  chicken = CharacterModel(skinId);
+  chicken.position.x = 0;
+  chicken.position.y = currentLane ? currentLane * positionWidth * zoom : 0;
+  scene.add(chicken);
+  dirLight.target = chicken;
+}
 
 hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.6);
 scene.add(hemiLight);
@@ -266,8 +298,6 @@ const initaliseValues = () => {
   stepStartTimestamp = null;
   gameOver = false;
   eagleWarningShown = false;
-  coinCount = 0;
-  coinDOM.textContent = "🪙 0";
   eagleWarningDOM.classList.remove("active");
   chicken.position.x = 0;
   chicken.position.y = 0;
@@ -439,6 +469,47 @@ function Chicken() {
   rowel.receiveShadow = false;
   chicken.add(rowel);
   return chicken;
+}
+
+function Pig() {
+  const pig = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(chickenSize * zoom, chickenSize * zoom, 18 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xf5a9c3, flatShading: true })
+  );
+  body.position.z = 9 * zoom;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  pig.add(body);
+
+  const snout = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(6 * zoom, 5 * zoom, 4 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xe07ba0, flatShading: true })
+  );
+  snout.position.set(0, -(chickenSize / 2 + 1) * zoom, 10 * zoom);
+  snout.castShadow = true;
+  pig.add(snout);
+
+  // Curly tail made of two small offset cubes to suggest a curl
+  const tail1 = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(2 * zoom, 2 * zoom, 2 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xe07ba0, flatShading: true })
+  );
+  tail1.position.set(0, (chickenSize / 2 + 1) * zoom, 16 * zoom);
+  pig.add(tail1);
+
+  const tail2 = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(2 * zoom, 2 * zoom, 2 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xe07ba0, flatShading: true })
+  );
+  tail2.position.set(2 * zoom, (chickenSize / 2 + 2) * zoom, 18 * zoom);
+  pig.add(tail2);
+
+  return pig;
+}
+
+function CharacterModel(skinId) {
+  return skinId === "pig" ? Pig() : Chicken();
 }
 
 function Road() {
@@ -862,6 +933,15 @@ document.getElementById("resetScoreBtn").addEventListener("click", () => {
   setHighScore("arcade", 0);
   highScore = 0;
   highscoreDOM.textContent = "Best: 0";
+
+  const btn = document.getElementById("resetScoreBtn");
+  const originalText = "Reset Score";
+  btn.textContent = "Score Reset!";
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }, 1200);
 });
 
 document.getElementById("mainMenuBtn").addEventListener("click", () => {
@@ -873,4 +953,85 @@ document.getElementById("mainMenuBtn").addEventListener("click", () => {
   laneEnterTime = 0;
   highscoreDOM.textContent = "Best: " + getHighScore("classic");
   document.getElementById("splash").style.display = "flex";
+});
+
+function renderSkinList() {
+  const skinListDOM = document.getElementById("skinList");
+  const unlocked = getUnlockedSkins();
+  const active = getActiveSkin();
+  const coins = getTotalCoins();
+
+  document.getElementById("rewardsCoinCount").textContent = coins;
+  skinListDOM.innerHTML = "";
+
+  skinDefinitions.forEach((skin) => {
+    const isUnlocked = unlocked.includes(skin.id);
+    const isActive = skin.id === active;
+
+    const card = document.createElement("div");
+    card.className = "skin-card" + (isActive ? " selected" : "");
+
+    const preview = document.createElement("div");
+    preview.className = "skin-preview";
+    const previewInner = document.createElement("div");
+    previewInner.className = skin.previewClass;
+    preview.appendChild(previewInner);
+
+    const info = document.createElement("div");
+    info.className = "skin-info";
+    const nameDiv = document.createElement("div");
+    nameDiv.className = "skin-name";
+    nameDiv.textContent = skin.name;
+    info.appendChild(nameDiv);
+
+    if (!isUnlocked) {
+      const costDiv = document.createElement("div");
+      costDiv.className = "skin-cost";
+      costDiv.textContent = "🪙 " + skin.cost + " to unlock";
+      info.appendChild(costDiv);
+    }
+
+    const actionBtn = document.createElement("button");
+    actionBtn.className = "skin-action-btn";
+
+    if (isActive) {
+      actionBtn.textContent = "Selected";
+      actionBtn.classList.add("selected-btn");
+      actionBtn.disabled = true;
+    } else if (isUnlocked) {
+      actionBtn.textContent = "Select";
+      actionBtn.addEventListener("click", () => {
+        setActiveSkin(skin.id);
+        swapCharacterModel(skin.id);
+        renderSkinList();
+      });
+    } else {
+      actionBtn.textContent = "Unlock";
+      actionBtn.classList.add("locked");
+      if (coins < skin.cost) actionBtn.disabled = true;
+      actionBtn.addEventListener("click", () => {
+        const currentCoins = getTotalCoins();
+        if (currentCoins < skin.cost) return;
+        setTotalCoins(currentCoins - skin.cost);
+        coinCount = currentCoins - skin.cost;
+        coinDOM.textContent = "🪙 " + coinCount;
+        unlockSkin(skin.id);
+        renderSkinList();
+      });
+    }
+
+    info.appendChild(actionBtn);
+    card.appendChild(preview);
+    card.appendChild(info);
+    skinListDOM.appendChild(card);
+  });
+}
+
+document.getElementById("rewardsBtn").addEventListener("click", () => {
+  renderSkinList();
+  document.getElementById("rewardsModal").classList.add("open");
+});
+
+document.getElementById("closeRewardsBtn").addEventListener("click", () => {
+  document.getElementById("rewardsModal").classList.remove("open");
 });
