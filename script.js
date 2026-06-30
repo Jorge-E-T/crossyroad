@@ -965,35 +965,26 @@ window.addEventListener("keydown", (event) => {
   else if (event.keyCode == "39") move("right");
 });
 
-// R1 scroll wheel — requires 2 scroll events in the same direction within 180ms to count
-// as intentional. Single phantom events (the r1's accidental misfires) are ignored.
-// After a valid move fires, the counter resets and a cooldown blocks any new move
-// until the current hop animation finishes.
-
-let scrollUpCount = 0;
-let scrollDownCount = 0;
-let scrollUpTimer = null;
-let scrollDownTimer = null;
-let lastMoveFiredTime = 0;
-const scrollWindowMs = 180;    // how long to collect events before deciding
-const scrollThreshold = 2;     // minimum events required to count as intentional
-const scrollMoveCooldown = stepTime + 100; // block new moves until hop finishes
+// R1 scroll wheel — one notch = one hop, no accidental repeats.
+// We use two guards:
+//   1. moves.length > 0 (already in move()) blocks a new hop while one is animating.
+//   2. A per-direction debounce prevents the same direction firing twice from one physical notch.
+let lastScrollUp = 0;
+let lastScrollDown = 0;
+const scrollDebounce = stepTime + 120; // slightly longer than one hop animation
 
 window.addEventListener("scrollUp", () => {
   const now = Date.now();
-  if (now - lastMoveFiredTime < scrollMoveCooldown) return;
+  if (now - lastScrollUp < scrollDebounce) return;
+  lastScrollUp = now;
+  move("forward");
+});
 
-  scrollUpCount++;
-
-  if (scrollUpTimer) clearTimeout(scrollUpTimer);
-  scrollUpTimer = setTimeout(() => {
-    if (scrollUpCount >= scrollThreshold) {
-      lastMoveFiredTime = Date.now();
-      move("forward");
-    }
-    scrollUpCount = 0;
-    scrollUpTimer = null;
-  }, scrollWindowMs);
+window.addEventListener("scrollDown", () => {
+  const now = Date.now();
+  if (now - lastScrollDown < scrollDebounce) return;
+  lastScrollDown = now;
+  move("backward");
 });
 
 window.addEventListener("scrollDown", () => {
