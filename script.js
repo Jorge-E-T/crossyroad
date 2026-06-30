@@ -177,19 +177,22 @@ const truckFrontTexture = new Texture(30, 30, [{ x: 15, y: 0, w: 10, h: 30 }]);
 const truckRightSideTexture = new Texture(25, 30, [{ x: 0, y: 15, w: 10, h: 10 }]);
 const truckLeftSideTexture = new Texture(25, 30, [{ x: 0, y: 5, w: 10, h: 10 }]);
 
-const generateLanes = () =>
-  [-9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    .map((index) => {
-      const lane = new Lane(index);
-      lane.mesh.position.y = index * positionWidth * zoom;
-      scene.add(lane.mesh);
-      return lane;
-    })
-    .filter((lane) => lane.index >= 0);
+const generateLanes = () => {
+  const result = [];
+  [-9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9].forEach((index) => {
+    const prevType = result.length > 0 ? result[result.length - 1].type : null;
+    const lane = new Lane(index, prevType);
+    lane.mesh.position.y = index * positionWidth * zoom;
+    scene.add(lane.mesh);
+    result.push(lane);
+  });
+  return result.filter((lane) => lane.index >= 0);
+};
 
 const addLane = () => {
   const index = lanes.length;
-  const lane = new Lane(index);
+  const prevType = lanes.length > 0 ? lanes[lanes.length - 1].type : null;
+  const lane = new Lane(index, prevType);
   lane.mesh.position.y = index * positionWidth * zoom;
   scene.add(lane.mesh);
   lanes.push(lane);
@@ -670,10 +673,13 @@ function Grass() {
   return grass;
 }
 
-function Lane(index) {
+function Lane(index, prevType) {
   this.index = index;
   this.type = index <= 0 ? "field" : laneTypes[Math.floor(Math.random() * laneTypes.length)];
-  if (this.type === "river" && Math.random() < 0.5) this.type = "car"; // keep rivers a bit less frequent than roads
+  // Prevent two rivers in a row (can create impossible crossings)
+  if (this.type === "river" && prevType === "river") this.type = "car";
+  // Keep rivers sparse overall
+  if (this.type === "river" && Math.random() < 0.5) this.type = "car";
   switch (this.type) {
     case "field": {
       this.type = "field";
@@ -687,7 +693,9 @@ function Lane(index) {
     case "forest": {
       this.mesh = new Grass();
       this.occupiedPositions = new Set();
-      this.threes = [1, 2, 3, 4].map(() => {
+      // In arcade mode use fewer trees so auto-sidestep has more viable paths
+      const treeCount = gameMode === "arcade" ? 2 : 4;
+      this.threes = Array.from({ length: treeCount }).map(() => {
         const three = new Three();
         let position;
         do {
@@ -957,33 +965,66 @@ window.addEventListener("keydown", (event) => {
   else if (event.keyCode == "39") move("right");
 });
 
-// R1 scroll wheel
-let lastScrollMoveTime = 0;
-const scrollCooldown = 150; // ms required between scroll moves
+// R1 scroll wheel — one notch = one hop, no accidental repeats.
+// We use two guards:
+//   1. moves.length > 0 (already in move()) blocks a new hop while one is animating.
+//   2. A per-direction debounce prevents the same direction firing twice from one physical notch.
+let lastScrollUp = 0;
+let lastScrollDown = 0;
+const scrollDebounce = stepTime + 80; // slightly longer than one hop animation
 
-function scrollMove(direction) {
+window.addEventListener("scrollUp", () => {
   const now = Date.now();
-  if (now - lastScrollMoveTime < scrollCooldown) return;
-  lastScrollMoveTime = now;
-  move(direction);
-}
+  if (now - lastScrollUp < scrollDebounce) return;
+  lastScrollUp = now;
+  move("forward");
+});
 
-window.addEventListener("scrollUp", () => scrollMove("forward"));
-window.addEventListener("scrollDown", () => scrollMove("backward"));
+window.addEventListener("scrollDown", () => {
+  const now = Date.now();
+  if (now - lastScrollDown < scrollDebounce) return;
+  lastScrollDown = now;
+  move("backward");
+});
 
 function findClearestColumn(laneIndex, fromColumn) {
   const lane = lanes[laneIndex];
   if (!lane || lane.type !== "forest") return fromColumn;
-  if (!lane.occupiedPositions.has(fromColumn)) return fromColumn;
 
-  // Search outward from fromColumn across the full lane width
-  for (let offset = 1; offset < columns; offset++) {
+  // If the current column is clear, stay there — but still validate it isn't a dead end.
+  const candidates = [];
+  for (let offset = 0; offset < columns; offset++) {
     const right = fromColumn + offset;
     const left = fromColumn - offset;
-    if (right < columns && !lane.occupiedPositions.has(right)) return right;
-    if (left >= 0 && !lane.occupiedPositions.has(left)) return left;
+    if (right < columns && !lane.occupiedPositions.has(right)) {
+      if (!candidates.includes(right)) candidates.push(right);
+    }
+    if (left >= 0 && !lane.occupiedPositions.has(left)) {
+      if (!candidates.includes(left)) candidates.push(left);
+    }
   }
-  return fromColumn; // no clear path found (shouldn't normally happen)
+
+  if (candidates.length === 0) return fromColumn; // fully blocked, shouldn't happen
+
+  // Look ahead: prefer a candidate that also has an exit in the next lane
+  const nextLane = lanes[laneIndex + 1];
+  if (nextLane && nextLane.type === "forest") {
+    // Score each candidate: prefer ones where at least one neighbor column is clear in the
+    // next lane too, so the player isn't immediately trapped again
+    const scored = candidates.map((col) => {
+      const exits = [-1, 0, 1].filter((d) => {
+        const c = col + d;
+        return c >= 0 && c < columns && !nextLane.occupiedPositions.has(c);
+      }).length;
+      return { col, exits };
+    });
+    // Pick the candidate closest to fromColumn that has at least one exit forward
+    const safe = scored.filter((s) => s.exits > 0);
+    if (safe.length > 0) return safe[0].col;
+  }
+
+  // No look-ahead available or all candidates lead to dead ends — just pick nearest open
+  return candidates[0];
 }
 
 function move(direction) {
