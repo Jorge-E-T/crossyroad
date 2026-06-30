@@ -965,26 +965,52 @@ window.addEventListener("keydown", (event) => {
   else if (event.keyCode == "39") move("right");
 });
 
-// R1 scroll wheel — one notch = one hop, no accidental repeats.
-// We use two guards:
-//   1. moves.length > 0 (already in move()) blocks a new hop while one is animating.
-//   2. A per-direction debounce prevents the same direction firing twice from one physical notch.
-let lastScrollUp = 0;
-let lastScrollDown = 0;
-const scrollDebounce = stepTime + 80; // slightly longer than one hop animation
+// R1 scroll wheel — requires 2 scroll events in the same direction within 180ms to count
+// as intentional. Single phantom events (the r1's accidental misfires) are ignored.
+// After a valid move fires, the counter resets and a cooldown blocks any new move
+// until the current hop animation finishes.
+
+let scrollUpCount = 0;
+let scrollDownCount = 0;
+let scrollUpTimer = null;
+let scrollDownTimer = null;
+let lastMoveFiredTime = 0;
+const scrollWindowMs = 180;    // how long to collect events before deciding
+const scrollThreshold = 2;     // minimum events required to count as intentional
+const scrollMoveCooldown = stepTime + 100; // block new moves until hop finishes
 
 window.addEventListener("scrollUp", () => {
   const now = Date.now();
-  if (now - lastScrollUp < scrollDebounce) return;
-  lastScrollUp = now;
-  move("forward");
+  if (now - lastMoveFiredTime < scrollMoveCooldown) return;
+
+  scrollUpCount++;
+
+  if (scrollUpTimer) clearTimeout(scrollUpTimer);
+  scrollUpTimer = setTimeout(() => {
+    if (scrollUpCount >= scrollThreshold) {
+      lastMoveFiredTime = Date.now();
+      move("forward");
+    }
+    scrollUpCount = 0;
+    scrollUpTimer = null;
+  }, scrollWindowMs);
 });
 
 window.addEventListener("scrollDown", () => {
   const now = Date.now();
-  if (now - lastScrollDown < scrollDebounce) return;
-  lastScrollDown = now;
-  move("backward");
+  if (now - lastMoveFiredTime < scrollMoveCooldown) return;
+
+  scrollDownCount++;
+
+  if (scrollDownTimer) clearTimeout(scrollDownTimer);
+  scrollDownTimer = setTimeout(() => {
+    if (scrollDownCount >= scrollThreshold) {
+      lastMoveFiredTime = Date.now();
+      move("backward");
+    }
+    scrollDownCount = 0;
+    scrollDownTimer = null;
+  }, scrollWindowMs);
 });
 
 function findClearestColumn(laneIndex, fromColumn) {
@@ -1282,7 +1308,9 @@ function animate(timestamp) {
       const carMinX = vechicle.position.x - (vechicleLength * zoom) / 2;
       const carMaxX = vechicle.position.x + (vechicleLength * zoom) / 2;
       if (chickenMaxX > carMinX && chickenMinX < carMaxX) {
-        triggerGameOver("Score: " + currentLane + "\nBest: " + highScore, true);
+        const vehicleName = lanes[currentLane].type === "truck" ? "truck" : "car";
+        triggerGameOver("Hit by a " + vehicleName + "!\nScore: " + currentLane + "\nBest: " + highScore, true);
+      }
       }
     });
   }
