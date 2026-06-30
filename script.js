@@ -215,6 +215,9 @@ function unlockSkin(skinId) {
 const skinDefinitions = [
   { id: "chicken", name: "Chicken", cost: 0, previewClass: "preview-chicken" },
   { id: "pig", name: "Pig", cost: 10, previewClass: "preview-pig" },
+  { id: "gifty", name: "Gifty", cost: 15, previewClass: "preview-gifty" },
+  { id: "duck", name: "Baby Duck", cost: 15, previewClass: "preview-duck" },
+  { id: "pigeon", name: "Poopy Pigeon", cost: 20, previewClass: "preview-pigeon" },
 ];
 
 let chicken = CharacterModel(getActiveSkin());
@@ -253,10 +256,13 @@ backLight.position.set(200, 200, 50);
 backLight.castShadow = true;
 scene.add(backLight);
 
-const laneTypes = ["car", "truck", "forest"];
+const laneTypes = ["car", "truck", "forest", "tracks", "river"];
 const laneSpeeds = [2, 2.5, 3];
 const vechicleColors = [0xa52523, 0xbdb638, 0x78b14b];
 const threeHeights = [20, 45, 60];
+const trainSpeed = 9; // trains move much faster than cars
+const trainWarningDuration = 1200; // ms of warning before the train actually arrives
+const padDrift = [1, 1.5, 2]; // lily pad drift speeds, similar feel to vehicle lanes
 
 function Coin() {
   const coin = new THREE.Mesh(
@@ -299,8 +305,10 @@ const initaliseValues = () => {
   gameOver = false;
   eagleWarningShown = false;
   eagleWarningDOM.classList.remove("active");
+  swapCharacterModel(getActiveSkin()); // rebuild a fresh, unflattened, fully opaque character
   chicken.position.x = 0;
   chicken.position.y = 0;
+  chicken.scale.z = 1;
   camera.position.y = initialCameraPositionY;
   camera.position.x = initialCameraPositionX;
   dirLight.position.x = initialDirLightPositionX;
@@ -508,8 +516,112 @@ function Pig() {
   return pig;
 }
 
+function Gifty() {
+  const gifty = new THREE.Group();
+  const box = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(chickenSize * zoom, chickenSize * zoom, 18 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xe63946, flatShading: true })
+  );
+  box.position.z = 9 * zoom;
+  box.castShadow = true;
+  box.receiveShadow = true;
+  gifty.add(box);
+
+  const ribbonV = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(3 * zoom, chickenSize * zoom + 1, 18.5 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xffd700, flatShading: true })
+  );
+  ribbonV.position.z = 9 * zoom;
+  gifty.add(ribbonV);
+
+  const ribbonH = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(chickenSize * zoom + 1, 3 * zoom, 18.5 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xffd700, flatShading: true })
+  );
+  ribbonH.position.z = 9 * zoom;
+  gifty.add(ribbonH);
+
+  const bowL = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(4 * zoom, 4 * zoom, 4 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xffd700, flatShading: true })
+  );
+  bowL.position.set(-3 * zoom, 0, 20 * zoom);
+  gifty.add(bowL);
+
+  const bowR = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(4 * zoom, 4 * zoom, 4 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xffd700, flatShading: true })
+  );
+  bowR.position.set(3 * zoom, 0, 20 * zoom);
+  gifty.add(bowR);
+
+  return gifty;
+}
+
+function BabyDuck() {
+  const duck = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(chickenSize * zoom, chickenSize * zoom, 16 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xffe066, flatShading: true })
+  );
+  body.position.z = 8 * zoom;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  duck.add(body);
+
+  const beak = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(5 * zoom, 4 * zoom, 3 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xf5a623, flatShading: true })
+  );
+  beak.position.set(0, -(chickenSize / 2 + 1) * zoom, 9 * zoom);
+  duck.add(beak);
+
+  const wing = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(5 * zoom, 7 * zoom, 8 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xe6c64f, flatShading: true })
+  );
+  wing.position.set((chickenSize / 2 - 1) * zoom, 0, 9 * zoom);
+  duck.add(wing);
+
+  return duck;
+}
+
+function PoopyPigeon() {
+  const pigeon = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(chickenSize * zoom, chickenSize * zoom, 18 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xb0b3b8, flatShading: true })
+  );
+  body.position.z = 9 * zoom;
+  body.castShadow = true;
+  body.receiveShadow = true;
+  pigeon.add(body);
+
+  const chest = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(chickenSize * 0.7 * zoom, 4 * zoom, 10 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xf4f4f4, flatShading: true })
+  );
+  chest.position.set(0, -(chickenSize / 2 - 1) * zoom, 6 * zoom);
+  pigeon.add(chest);
+
+  const beak = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(4 * zoom, 4 * zoom, 3 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0xe8732a, flatShading: true })
+  );
+  beak.position.set(0, -(chickenSize / 2 + 1) * zoom, 11 * zoom);
+  pigeon.add(beak);
+
+  return pigeon;
+}
+
 function CharacterModel(skinId) {
-  return skinId === "pig" ? Pig() : Chicken();
+  switch (skinId) {
+    case "pig": return Pig();
+    case "gifty": return Gifty();
+    case "duck": return BabyDuck();
+    case "pigeon": return PoopyPigeon();
+    default: return Chicken();
+  }
 }
 
 function Road() {
@@ -554,6 +666,7 @@ function Grass() {
 function Lane(index) {
   this.index = index;
   this.type = index <= 0 ? "field" : laneTypes[Math.floor(Math.random() * laneTypes.length)];
+  if (this.type === "river" && Math.random() < 0.5) this.type = "car"; // keep rivers a bit less frequent than roads
   switch (this.type) {
     case "field": {
       this.type = "field";
@@ -630,7 +743,144 @@ function Lane(index) {
       this.coins = [];
       break;
     }
+    case "tracks": {
+      this.mesh = new Tracks();
+      this.direction = Math.random() >= 0.5;
+      this.train = new Train();
+      // Start the train off-screen; it only becomes visible/dangerous while "active"
+      this.train.position.x = this.direction
+        ? (boardWidth * zoom) / 2 + positionWidth * 3 * zoom
+        : (-boardWidth * zoom) / 2 - positionWidth * 3 * zoom;
+      this.mesh.add(this.train);
+      this.trainActive = false;
+      this.trainWarningActive = false;
+      this.nextTrainTime = performance.now() + 2000 + Math.random() * 4000;
+      this.occupiedPositions = new Set();
+      this.coinPositions = new Set();
+      this.coins = [];
+      break;
+    }
+    case "river": {
+      this.mesh = new River();
+      this.direction = Math.random() >= 0.5;
+      this.speed = padDrift[Math.floor(Math.random() * padDrift.length)];
+      this.occupiedPositions = new Set(); // not used for blocking, kept for consistency
+      const padPositions = new Set();
+      this.pads = [1, 2, 3].map(() => {
+        const pad = new LilyPad();
+        let position;
+        do {
+          position = Math.floor((Math.random() * columns) / 2);
+        } while (padPositions.has(position));
+        padPositions.add(position);
+        pad.position.x =
+          (position * positionWidth * 2 + positionWidth / 2) * zoom - (boardWidth * zoom) / 2;
+        this.mesh.add(pad);
+        return pad;
+      });
+      this.coinPositions = new Set();
+      this.coins = [];
+      break;
+    }
   }
+}
+
+function Tracks() {
+  const group = new THREE.Group();
+  const bed = new THREE.Mesh(
+    new THREE.PlaneBufferGeometry(boardWidth * zoom, positionWidth * zoom),
+    new THREE.MeshPhongMaterial({ color: 0x6b5842 })
+  );
+  bed.receiveShadow = true;
+  group.add(bed);
+
+  const railOffset = 10 * zoom;
+  [-railOffset, railOffset].forEach((offsetY) => {
+    const rail = new THREE.Mesh(
+      new THREE.BoxBufferGeometry(boardWidth * zoom, 2 * zoom, 1.5 * zoom),
+      new THREE.MeshLambertMaterial({ color: 0x999999, flatShading: true })
+    );
+    rail.position.y = offsetY;
+    rail.position.z = 1 * zoom;
+    group.add(rail);
+  });
+
+  // Railroad ties
+  for (let i = 0; i < columns * 1.2; i++) {
+    const tie = new THREE.Mesh(
+      new THREE.BoxBufferGeometry(4 * zoom, positionWidth * 0.8 * zoom, 1 * zoom),
+      new THREE.MeshLambertMaterial({ color: 0x3d2b1f, flatShading: true })
+    );
+    tie.position.x = -boardWidth * zoom / 2 + i * (boardWidth * zoom) / (columns * 1.2);
+    tie.position.z = 0.6 * zoom;
+    group.add(tie);
+  }
+
+  return group;
+}
+
+function Train() {
+  const train = new THREE.Group();
+  const engine = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(130 * zoom, 28 * zoom, 30 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0x2266cc, flatShading: true })
+  );
+  engine.position.z = 16 * zoom;
+  engine.castShadow = true;
+  engine.receiveShadow = true;
+  train.add(engine);
+
+  const cabin = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(30 * zoom, 26 * zoom, 14 * zoom),
+    new THREE.MeshPhongMaterial({ color: 0xdddddd, flatShading: true })
+  );
+  cabin.position.set(-40 * zoom, 0, 32 * zoom);
+  cabin.castShadow = true;
+  train.add(cabin);
+
+  return train;
+}
+
+function River() {
+  const river = new THREE.Group();
+  const createSection = (color) =>
+    new THREE.Mesh(
+      new THREE.PlaneBufferGeometry(boardWidth * zoom, positionWidth * zoom),
+      new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.9 })
+    );
+  const middle = createSection(0x3a8fd1);
+  middle.receiveShadow = true;
+  river.add(middle);
+  const left = createSection(0x3179b3);
+  left.position.x = -boardWidth * zoom;
+  river.add(left);
+  const right = createSection(0x3179b3);
+  right.position.x = boardWidth * zoom;
+  river.add(right);
+  return river;
+}
+
+function LilyPad() {
+  const pad = new THREE.Group();
+  const base = new THREE.Mesh(
+    new THREE.CylinderBufferGeometry(16 * zoom, 16 * zoom, 2 * zoom, 12),
+    new THREE.MeshLambertMaterial({ color: 0x4caf50, flatShading: true })
+  );
+  base.rotation.x = Math.PI / 2;
+  base.position.z = 3 * zoom;
+  base.castShadow = true;
+  base.receiveShadow = true;
+  pad.add(base);
+
+  const notch = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(8 * zoom, 8 * zoom, 3 * zoom),
+    new THREE.MeshLambertMaterial({ color: 0x2e7d32, flatShading: true })
+  );
+  notch.position.set(12 * zoom, 0, 3 * zoom);
+  notch.rotation.z = Math.PI / 4;
+  pad.add(notch);
+
+  return pad;
 }
 
 document.querySelector("#retry").addEventListener("click", () => {
@@ -734,6 +984,14 @@ function move(direction) {
   }
 }
 
+// Checks whether the chicken's current column sits on a lily pad in a river lane.
+// Returns true if safe (on a pad or not in a river at all), false if it would drown.
+function isSafeOnRiver(lane, chickenX) {
+  if (!lane || lane.type !== "river") return true;
+  const padRadius = 16 * zoom; // matches LilyPad's cylinder radius
+  return lane.pads.some((pad) => Math.abs(pad.position.x - chickenX) < padRadius * 0.75);
+}
+
 function animate(timestamp) {
   requestAnimationFrame(animate);
   if (!previousTimestamp) previousTimestamp = timestamp;
@@ -757,6 +1015,54 @@ function animate(timestamp) {
               : (vechicle.position.x += (lane.speed / 16) * delta);
         }
       });
+    } else if (lane.type === "river") {
+      const aBitBeforeTheBeginingOfLane = (-boardWidth * zoom) / 2 - positionWidth * 2 * zoom;
+      const aBitAfterTheEndOFLane = (boardWidth * zoom) / 2 + positionWidth * 2 * zoom;
+      lane.pads.forEach((pad) => {
+        if (lane.direction) {
+          pad.position.x =
+            pad.position.x < aBitBeforeTheBeginingOfLane
+              ? aBitAfterTheEndOFLane
+              : (pad.position.x -= (lane.speed / 16) * delta);
+        } else {
+          pad.position.x =
+            pad.position.x > aBitAfterTheEndOFLane
+              ? aBitBeforeTheBeginingOfLane
+              : (pad.position.x += (lane.speed / 16) * delta);
+        }
+      });
+    } else if (lane.type === "tracks") {
+      const now = performance.now();
+      if (!lane.trainActive && !lane.trainWarningActive && now > lane.nextTrainTime) {
+        lane.trainWarningActive = true;
+        lane.warningStartTime = now;
+        if (lane.index === currentLane || lane.index === currentLane + 1) {
+          document.getElementById("trainWarning").classList.add("active");
+        }
+      }
+      if (lane.trainWarningActive && now - lane.warningStartTime > trainWarningDuration) {
+        lane.trainWarningActive = false;
+        lane.trainActive = true;
+        document.getElementById("trainWarning").classList.remove("active");
+        lane.train.position.x = lane.direction
+          ? (boardWidth * zoom) / 2 + positionWidth * 3 * zoom
+          : (-boardWidth * zoom) / 2 - positionWidth * 3 * zoom;
+      }
+      if (lane.trainActive) {
+        if (lane.direction) {
+          lane.train.position.x -= (trainSpeed / 16) * delta;
+          if (lane.train.position.x < (-boardWidth * zoom) / 2 - positionWidth * 3 * zoom) {
+            lane.trainActive = false;
+            lane.nextTrainTime = now + 3000 + Math.random() * 5000;
+          }
+        } else {
+          lane.train.position.x += (trainSpeed / 16) * delta;
+          if (lane.train.position.x > (boardWidth * zoom) / 2 + positionWidth * 3 * zoom) {
+            lane.trainActive = false;
+            lane.nextTrainTime = now + 3000 + Math.random() * 5000;
+          }
+        }
+      }
     }
   });
 
@@ -852,7 +1158,7 @@ function animate(timestamp) {
     }
   }
 
-  // Hit test
+  // Hit test - cars/trucks
   if (lanes[currentLane].type === "car" || lanes[currentLane].type === "truck") {
     const chickenMinX = chicken.position.x - (chickenSize * zoom) / 2;
     const chickenMaxX = chicken.position.x + (chickenSize * zoom) / 2;
@@ -861,9 +1167,42 @@ function animate(timestamp) {
       const carMinX = vechicle.position.x - (vechicleLength * zoom) / 2;
       const carMaxX = vechicle.position.x + (vechicleLength * zoom) / 2;
       if (chickenMaxX > carMinX && chickenMinX < carMaxX) {
-        triggerGameOver("Score: " + currentLane + "\nBest: " + highScore);
+        triggerGameOver("Score: " + currentLane + "\nBest: " + highScore, true);
       }
     });
+  }
+
+  // Hit test - trains (only dangerous once active, after the warning period)
+  if (lanes[currentLane].type === "tracks" && lanes[currentLane].trainActive) {
+    const chickenMinX = chicken.position.x - (chickenSize * zoom) / 2;
+    const chickenMaxX = chicken.position.x + (chickenSize * zoom) / 2;
+    const trainLength = 130;
+    const train = lanes[currentLane].train;
+    const trainMinX = train.position.x - (trainLength * zoom) / 2;
+    const trainMaxX = train.position.x + (trainLength * zoom) / 2;
+    if (chickenMaxX > trainMinX && chickenMinX < trainMaxX) {
+      triggerGameOver("Hit by a train!\nScore: " + currentLane + "\nBest: " + highScore, true);
+    }
+  }
+
+  // Drowning test - rivers (only checked once the chicken has finished landing, not mid-hop)
+  if (lanes[currentLane].type === "river" && !stepStartTimestamp) {
+    if (!isSafeOnRiver(lanes[currentLane], chicken.position.x)) {
+      triggerGameOver("You drowned!\nScore: " + currentLane + "\nBest: " + highScore, true);
+    }
+  }
+
+  // If standing on a river lane (and not mid-hop), drift the chicken along with its lily pad
+  if (lanes[currentLane] && lanes[currentLane].type === "river" && !stepStartTimestamp && !gameOver) {
+    const lane = lanes[currentLane];
+    const padRadius = 16 * zoom;
+    const ridingPad = lane.pads.find((pad) => Math.abs(pad.position.x - chicken.position.x) < padRadius * 0.75);
+    if (ridingPad) {
+      const drift = lane.direction ? -(lane.speed / 16) * delta : (lane.speed / 16) * delta;
+      chicken.position.x += drift;
+      camera.position.x += drift;
+      dirLight.position.x += drift;
+    }
   }
 
   // Eagle time limit check (only when chicken isn't mid-hop, and only once gameplay has actually started)
@@ -882,14 +1221,57 @@ function animate(timestamp) {
   renderer.render(scene, camera);
 }
 
-function triggerGameOver(message) {
+function flattenAndFade(onComplete) {
+  const duration = 1000; // ms
+  const startTime = performance.now();
+  const startScaleZ = chicken.scale.z;
+  const originalMaterialsOpacity = [];
+
+  chicken.traverse((obj) => {
+    if (obj.isMesh) {
+      obj.material = obj.material.clone();
+      obj.material.transparent = true;
+      originalMaterialsOpacity.push(obj.material);
+    }
+  });
+
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    // Squash flat within the first 35% of the animation, then hold and fade
+    const squashT = Math.min(t / 0.35, 1);
+    chicken.scale.z = startScaleZ * (1 - squashT * 0.92);
+    chicken.position.z = chicken.position.z * (1 - squashT) + 0.5 * zoom * squashT;
+
+    const fadeT = Math.max((t - 0.35) / 0.65, 0);
+    originalMaterialsOpacity.forEach((mat) => {
+      mat.opacity = 1 - fadeT;
+    });
+
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      onComplete();
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function triggerGameOver(message, animated) {
   if (gameOver) return;
   gameOver = true;
   moves = [];
   stopMusic();
   eagleWarningDOM.classList.remove("active");
-  endScoreDOM.textContent = message;
-  endDOM.style.visibility = "visible";
+
+  if (animated) {
+    flattenAndFade(() => {
+      endScoreDOM.textContent = message;
+      endDOM.style.visibility = "visible";
+    });
+  } else {
+    endScoreDOM.textContent = message;
+    endDOM.style.visibility = "visible";
+  }
 }
 
 function checkCoinCollect() {

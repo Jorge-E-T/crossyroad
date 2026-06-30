@@ -412,3 +412,122 @@ button {
   border-bottom-color: transparent;
   border-left-color: transparent;
 }
+
+/* Gifty preview */
+.preview-gifty {
+  width: 100%;
+  height: 100%;
+  background-color: #e63946;
+  border: 2px solid #b71f2c;
+  border-radius: 4px;
+  position: relative;
+}
+.preview-gifty::before {
+  /* vertical ribbon */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 100%;
+  background-color: #ffd700;
+}
+.preview-gifty::after {
+  /* bow */
+  content: "";
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 8px;
+  background-color: #ffd700;
+  border-radius: 50% 50% 0 0;
+}
+
+/* Baby Duck preview */
+.preview-duck {
+  width: 100%;
+  height: 100%;
+  background-color: #ffe066;
+  border: 2px solid #e6c64f;
+  border-radius: 12px;
+  position: relative;
+}
+.preview-duck::before {
+  /* beak */
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid #f5a623;
+}
+.preview-duck::after {
+  /* tiny wing */
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 4px;
+  width: 10px;
+  height: 8px;
+  background-color: #e6c64f;
+  border-radius: 50%;
+}
+
+/* Poopy Pigeon preview */
+.preview-pigeon {
+  width: 100%;
+  height: 100%;
+  background-color: #b0b3b8;
+  border: 2px solid #7d8085;
+  border-radius: 10px;
+  position: relative;
+}
+.preview-pigeon::before {
+  /* white chest patch */
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 14px;
+  background-color: #f4f4f4;
+  border-radius: 50%;
+}
+.preview-pigeon::after {
+  /* beak */
+  content: "";
+  position: absolute;
+  top: 12px;
+  right: -7px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 8px solid #e8732a;
+}
+
+#trainWarning {
+  position: fixed;
+  top: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 0, 0, 0.85);
+  color: white;
+  font-size: 7px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  z-index: 160;
+  display: none;
+}
+
+#trainWarning.active {
+  display: block;
+  animation: eagle-flash 0.3s ease-in-out infinite;
+}
