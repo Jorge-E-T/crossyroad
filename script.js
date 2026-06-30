@@ -473,7 +473,7 @@ window.addEventListener("keydown", (event) => {
 
 // R1 scroll wheel
 let lastScrollMoveTime = 0;
-const scrollCooldown = 200; // ms required between scroll moves — raise this to make the wheel less sensitive, lower it to make it more sensitive
+const scrollCooldown = 150; // ms required between scroll moves — raise this to make the wheel less sensitive, lower it to make it more sensitive
 
 function scrollMove(direction) {
   const now = Date.now();
