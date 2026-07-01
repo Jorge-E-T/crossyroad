@@ -944,7 +944,7 @@ function Eagle() {
 function LilyPad() {
   const pad = new THREE.Group();
   const base = new THREE.Mesh(
-    new THREE.CylinderBufferGeometry(16 * zoom, 16 * zoom, 2 * zoom, 12),
+    new THREE.CylinderBufferGeometry(20 * zoom, 20 * zoom, 2 * zoom, 12),
     new THREE.MeshLambertMaterial({ color: 0x4caf50, flatShading: true })
   );
   base.rotation.x = Math.PI / 2;
@@ -1126,7 +1126,7 @@ function move(direction) {
 // Returns true if safe (on a pad or not in a river at all), false if it would drown.
 function isSafeOnRiver(lane, chickenX) {
   if (!lane || lane.type !== "river") return true;
-  const padRadius = 16 * zoom; // matches LilyPad's cylinder radius
+  const padRadius = 20 * zoom; // matches LilyPad's cylinder radius
   return lane.pads.some((pad) => Math.abs(pad.position.x - chickenX) < padRadius * 0.75);
 }
 
