@@ -975,6 +975,8 @@ document.querySelector("#retry").addEventListener("click", () => {
 
 document.getElementById("left").addEventListener("click", () => move("left"));
 document.getElementById("right").addEventListener("click", () => move("right"));
+document.getElementById("tapZoneLeft").addEventListener("click", () => move("left"));
+document.getElementById("tapZoneRight").addEventListener("click", () => move("right"));
 
 window.addEventListener("keydown", (event) => {
   if (event.keyCode == "38") move("forward");
