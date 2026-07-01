@@ -264,7 +264,7 @@ backLight.position.set(200, 200, 50);
 backLight.castShadow = true;
 scene.add(backLight);
 
-const laneTypes = ["car", "truck", "forest", "tracks", "river"];
+const laneTypes = ["car", "truck", "forest", "forest", "tracks", "river"];
 const laneSpeeds = [2, 2.5, 3];
 const vechicleColors = [0xa52523, 0xbdb638, 0x78b14b];
 const threeHeights = [20, 45, 60];
@@ -694,7 +694,7 @@ function Lane(index, prevType) {
   // Prevent two rivers in a row (can create impossible crossings)
   if (this.type === "river" && prevType === "river") this.type = "car";
   // Keep rivers sparse overall
-  if (this.type === "river" && Math.random() < 0.5) this.type = "car";
+  if (this.type === "river" && Math.random() < 0.75) this.type = "car";
   switch (this.type) {
     case "field": {
       this.type = "field";
@@ -731,7 +731,7 @@ function Lane(index, prevType) {
       this.mesh = new Road();
       this.direction = Math.random() >= 0.5;
       const occupiedPositions = new Set();
-      this.vechicles = [1, 2, 3].map(() => {
+      this.vechicles = [1, 2].map(() => {
         const vechicle = new Car();
         let position;
         do {
